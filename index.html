@@ -1,374 +1,461 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <!-- Veltrax Data Flow Simulator v2.0 (Dark) -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Veltrax Data Flow Simulator</title>
+
+  <!-- Tailwind / Charts / D3 -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
+  <!-- Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
   <style>
+    :root{
+      --vx-purple:#8b5cf6;        /* electric purple */
+      --vx-purple-2:#7c3aed;
+      --vx-cyan:#06b6d4;
+      --vx-green:#10b981;
+      --vx-surface:#0f1522;       /* card */
+      --vx-bg:#070c14;            /* page bg */
+      --vx-border:#1f2a3a;
+      --vx-text:#e5e7eb;
+      --vx-muted:#9aa5b1;
+    }
     html,body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    .card{border:1px solid #e5e7eb;border-radius:1rem;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-    .badge{background:linear-gradient(135deg,#7c3aed,#4338ca);color:#fff}
-    .ring{box-shadow:0 0 0 2px rgba(124,58,237,.2)}
-    .muted{color:#64748b}
+    body{
+      color:var(--vx-text);
+      background:
+        radial-gradient(1200px 700px at 50% 10%, #121829 0%, #0b1220 55%, var(--vx-bg) 100%),
+        #0b1220;
+      overflow-x:hidden;
+    }
+    .card{background:var(--vx-surface); border:1px solid var(--vx-border); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .muted{color:var(--vx-muted)}
+    .badge{background:linear-gradient(135deg,var(--vx-purple),var(--vx-purple-2)); color:#fff}
+    .chip{border:1px solid var(--vx-border); border-radius:10px; padding:.35rem .6rem}
+    .glow { filter: drop-shadow(0 0 14px rgba(139,92,246,.35)); }
+    .ring { box-shadow:0 0 0 2px rgba(139,92,246,.3); }
+    .flow-line{ stroke: #a78bfa; stroke-width: 2; opacity:.55; }
+    .flow-line.fast{ stroke-width: 4; opacity:.85; }
+    .serverCore{
+      background: radial-gradient(220px 160px at 50% 45%, rgba(139,92,246,.25), rgba(139,92,246,.06) 40%, transparent 60%);
+    }
+    /* subtle moving particles */
+    .bg-particles:before{
+      content:""; position:fixed; inset:0; pointer-events:none;
+      background-image:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.08) 0, transparent 100%),
+        radial-gradient(2px 2px at 70% 60%, rgba(255,255,255,.06) 0, transparent 100%),
+        radial-gradient(2px 2px at 40% 80%, rgba(255,255,255,.06) 0, transparent 100%);
+      animation: drift 40s linear infinite;
+    }
+    @keyframes drift { 0%{transform:translateY(0)} 100%{transform:translateY(-200px)}}
+    a.link{color:#c7d2fe; text-decoration:underline}
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
-<header class="max-w-7xl mx-auto px-6 md:px-8 pt-8 pb-4">
+<body class="bg-particles">
+
+<!-- ── 1) Top bar ───────────────────────────────────────────────────────── -->
+<header class="max-w-7xl mx-auto px-6 md:px-8 pt-7 pb-4">
   <div class="flex items-center gap-4">
-    <!-- ====== Replace LOGO_URL below to show your logo ====== -->
     <div id="logo" class="h-10 w-10 rounded-xl badge flex items-center justify-center text-lg font-semibold">V</div>
     <div>
       <h1 class="text-2xl md:text-3xl font-semibold">Veltrax Data Flow Simulator</h1>
-      <p class="muted">Turn up data sources. See how Veltrax apps route, process, and prove value — live.</p>
+      <p class="muted">Pick your app. Turn up data. Watch the server ingest, batch, and process in real time.</p>
     </div>
     <div class="ml-auto flex gap-2">
-      <button id="btnPlay" class="px-3 py-2 rounded-lg bg-slate-900 text-white">Start</button>
-      <button id="btnReset" class="px-3 py-2 rounded-lg border border-slate-300">Reset</button>
+      <button id="btnPlay" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15">Start</button>
+      <button id="btnReset" class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10">Reset</button>
     </div>
   </div>
-  <div class="mt-3 flex flex-wrap items-center gap-4">
-    <label class="flex items-center gap-2 text-sm"><input id="toggleRag" type="checkbox" class="accent-purple-600">
+  <div class="mt-3 flex flex-wrap items-center gap-4 text-sm">
+    <label class="flex items-center gap-2">
+      <input id="toggleRag" type="checkbox" class="accent-purple-500">
       <span>Docs/RAG heavy workload</span>
     </label>
-    <label class="flex items-center gap-2 text-sm"><input id="toggleCloud" type="checkbox" class="accent-purple-600">
+    <label class="flex items-center gap-2">
+      <input id="toggleCloud" type="checkbox" class="accent-purple-500">
       <span>Simulate cloud mode (adds network latency & cost)</span>
     </label>
   </div>
 </header>
 
-<main class="max-w-7xl mx-auto px-6 md:px-8 pb-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
-  <!-- Sources -->
-  <section class="card p-5 lg:col-span-1">
-    <h2 class="text-lg font-semibold mb-3">Data sources (events/day)</h2>
+<!-- ── 2) Select model + hardware ───────────────────────────────────────── -->
+<section class="max-w-7xl mx-auto px-6 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="card p-5">
+    <h2 class="text-lg font-semibold mb-3">Choose your Veltrax app</h2>
+    <div id="appCards" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <!-- cards rendered by JS -->
+    </div>
+  </div>
+  <div class="card p-5">
+    <h2 class="text-lg font-semibold mb-3">Choose hardware profile</h2>
+    <div id="hwCards" class="grid grid-cols-2 gap-3">
+      <!-- hardware cards -->
+    </div>
+    <p class="muted text-xs mt-2">Throughput is based on sustained local inference + pipeline. DGX Spark sim boosts GPU batching.</p>
+  </div>
+  <div class="card p-5">
+    <h2 class="text-lg font-semibold mb-3">Live KPIs</h2>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="p-3 rounded-xl bg-white/5">
+        <div class="text-xs muted">Ingest rate</div>
+        <div id="kpiIngest" class="text-xl font-semibold">0.0 ev/s</div>
+      </div>
+      <div class="p-3 rounded-xl bg-white/5">
+        <div class="text-xs muted">Process rate</div>
+        <div id="kpiProcess" class="text-xl font-semibold">0.0 ev/s</div>
+      </div>
+      <div class="p-3 rounded-xl bg-white/5">
+        <div class="text-xs muted">Queue size</div>
+        <div id="kpiQueue" class="text-xl font-semibold">0</div>
+      </div>
+      <div class="p-3 rounded-xl bg-white/5">
+        <div class="text-xs muted">Avg. latency</div>
+        <div id="kpiLatency" class="text-xl font-semibold">0.00 s</div>
+      </div>
+      <div class="p-3 rounded-xl bg-white/5 col-span-2">
+        <div class="text-xs muted">Estimated ROI</div>
+        <div id="kpiROI" class="text-xl font-semibold">+0.0%</div>
+        <div class="text-xs muted mt-1">Simple model: value per processed event – cost per event.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3) Sources + Routing ─────────────────────────────────────────────── -->
+<section class="max-w-7xl mx-auto px-6 md:px-8 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="card p-5">
+    <h3 class="text-lg font-semibold mb-3">Data sources (events/day)</h3>
     <div id="sources" class="space-y-4"></div>
-  </section>
-
-  <!-- Apps + KPIs -->
-  <section class="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="card p-5">
-      <h3 class="text-lg font-semibold mb-3">Veltrax apps (max events/sec)</h3>
-      <div id="apps" class="space-y-4"></div>
-      <p class="mt-4 text-xs muted">Capacity ≈ sustained local inference + pipeline throughput.</p>
-    </div>
-
-    <div class="card p-5">
-      <h3 class="text-lg font-semibold mb-3">Live KPIs</h3>
+  </div>
+  <div class="card p-5">
+    <h3 class="text-lg font-semibold mb-3">Routing share</h3>
+    <p class="muted text-sm mb-3">Adjust % of incoming events sent to the selected app’s pipelines.</p>
+    <div id="routing" class="space-y-4"></div>
+  </div>
+  <div class="card p-5">
+    <h3 class="text-lg font-semibold mb-3">Server status</h3>
+    <div class="serverCore rounded-2xl border border-white/10 p-4">
       <div class="grid grid-cols-2 gap-3">
-        <div class="p-3 rounded-xl bg-slate-100">
-          <div class="text-xs muted">Ingest rate</div>
-          <div id="kpiIngest" class="text-xl font-semibold">0 ev/s</div>
+        <div class="p-3 bg-white/5 rounded-xl">
+          <div class="text-xs muted">GPU load</div>
+          <div id="gpuLoad" class="text-xl font-semibold">0%</div>
         </div>
-        <div class="p-3 rounded-xl bg-slate-100">
-          <div class="text-xs muted">Process rate</div>
-          <div id="kpiProcess" class="text-xl font-semibold">0 ev/s</div>
+        <div class="p-3 bg-white/5 rounded-xl">
+          <div class="text-xs muted">Batch size</div>
+          <div id="batchSize" class="text-xl font-semibold">0</div>
         </div>
-        <div class="p-3 rounded-xl bg-slate-100">
-          <div class="text-xs muted">Queue size</div>
-          <div id="kpiQueue" class="text-xl font-semibold">0</div>
+        <div class="p-3 bg-white/5 rounded-xl">
+          <div class="text-xs muted">RAM</div>
+          <div id="ramUse" class="text-xl font-semibold">0.0 GB</div>
         </div>
-        <div class="p-3 rounded-xl bg-slate-100">
-          <div class="text-xs muted">Est. latency</div>
-          <div id="kpiLatency" class="text-xl font-semibold">0.0 s</div>
-        </div>
-        <div class="p-3 rounded-xl bg-slate-100 col-span-2">
-          <div class="text-xs muted">Estimated ROI</div>
-          <div id="kpiROI" class="text-xl font-semibold">+0.0%</div>
-          <div class="text-xs muted mt-1">Simple model: value per processed event – cost per event.</div>
+        <div class="p-3 bg-white/5 rounded-xl">
+          <div class="text-xs muted">Pipeline cap</div>
+          <div id="pipeCap" class="text-xl font-semibold">0 ev/s</div>
         </div>
       </div>
-    </div>
-
-    <div class="card p-5">
-      <h3 class="text-lg font-semibold mb-3">Routing share</h3>
-      <p class="text-sm muted mb-3">Adjust % of incoming events sent to each app. (Auto-normalized to 100%.)</p>
-      <div id="routing" class="space-y-4"></div>
-    </div>
-  </section>
-
-  <!-- Charts -->
-  <section class="card p-5 lg:col-span-3">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2">
-        <h3 class="font-semibold mb-2">Queue & latency</h3>
-        <canvas id="chartQueue" height="180"></canvas>
-      </div>
-      <div>
-        <h3 class="font-semibold mb-2">Throughput by app</h3>
-        <canvas id="chartApps" height="180"></canvas>
+      <div class="mt-5">
+        <!-- Stylized server -->
+        <div class="h-28 rounded-xl border border-white/10 bg-gradient-to-b from-white/10 to-transparent relative overflow-hidden">
+          <div id="serverGlow" class="absolute inset-0 opacity-30 blur-2xl" style="background: radial-gradient(220px 120px at 50% 45%, rgba(139,92,246,.55), transparent 60%);"></div>
+          <div class="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-r from-transparent via-purple-400/50 to-transparent animate-pulse"></div>
+          <svg class="absolute inset-0 w-full h-full" id="flowSvg"></svg>
+        </div>
+        <p class="text-xs muted mt-2">Lines speed & thickness reflect live inflow → batches → processed.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Sankey -->
-  <section class="card p-5 lg:col-span-3">
+<!-- ── 4) Charts & Sankey ──────────────────────────────────────────────── -->
+<section class="max-w-7xl mx-auto px-6 md:px-8 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="card p-5 lg:col-span-2">
+    <h3 class="font-semibold mb-2">Queue & latency</h3>
+    <canvas id="chartQueue" height="180"></canvas>
+  </div>
+  <div class="card p-5">
+    <h3 class="font-semibold mb-2">Throughput by stage</h3>
+    <canvas id="chartApps" height="180"></canvas>
+  </div>
+</section>
+
+<section class="max-w-7xl mx-auto px-6 md:px-8 mt-6">
+  <div class="card p-5">
     <h3 class="font-semibold mb-2">Live data flow (Sankey)</h3>
     <svg id="sankey" width="100%" height="320"></svg>
-    <p class="text-xs muted mt-2">Width of links reflects current events/sec from sources → apps after routing.</p>
-  </section>
-</main>
+    <p class="text-xs muted mt-2">Width of links reflects current events/sec from sources → pipelines after routing.</p>
+  </div>
+</section>
 
+<!-- ── 5) Footer CTA ───────────────────────────────────────────────────── -->
+<footer class="max-w-7xl mx-auto px-6 md:px-8 py-10">
+  <div class="card p-5 flex items-center justify-between">
+    <div>
+      <div class="text-sm muted">Message for appointments:</div>
+      <a class="link" href="https://www.linkedin.com/company/veltrax-technologies/?viewAsMember=true" target="_blank" rel="noopener">https://www.linkedin.com/company/veltrax-technologies/?viewAsMember=true</a>
+    </div>
+    <div class="text-xs muted">© Veltrax Technologies</div>
+  </div>
+</footer>
+
+<!-- ── 6) Script: state + simulation ───────────────────────────────────── -->
 <script>
-/* ===== 0) Brand: set your logo URL (SVG/PNG). Leave empty to use the “V” badge. ===== */
-const LOGO_URL = ""; // e.g., "https://yourcdn.com/veltrax-logo.svg"
-if(LOGO_URL){
+/* 6.1 Branding: set your logo path (PNG/SVG). Leave empty to keep "V" badge. */
+const LOGO_URL = ""; // e.g. "./assets/Logo-white.png"
+(function mountLogo(){
+  if(!LOGO_URL) return;
+  const wrap = document.getElementById('logo'); if(!wrap) return;
   const img = new Image();
-  img.src = LOGO_URL; img.alt = "Veltrax";
-  img.className = "h-10 w-10 object-contain";
-  const wrap = document.getElementById('logo'); wrap.replaceChildren(img);
+  img.onload = ()=>wrap.replaceChildren(img);
+  img.onerror = ()=>console.warn("Logo failed:", LOGO_URL);
+  img.src = LOGO_URL; img.alt="Veltrax"; img.className="h-10 w-10 object-contain glow";
+})();
+
+/* 6.2 App profiles (realistic relative capacities & costs) */
+const APPS = {
+  finex:  { name:"Finex",   desc:"Banking & Fraud Prevention", color:"#8b5cf6",
+            baseCap: 900,  // ev/s on workstation
+            valuePerEvent: 0.0016, costLocal: 0.00055, ragPenalty: .90 },
+  echelon:{ name:"Échelon", desc:"Retail Intelligence",        color:"#10b981",
+            baseCap: 700, valuePerEvent: 0.0012, costLocal: 0.00045, ragPenalty: .95 },
+  verdict:{ name:"Verdict", desc:"Legal Ops AI",               color:"#06b6d4",
+            baseCap: 420, valuePerEvent: 0.0019, costLocal: 0.00065, ragPenalty: .75 }
+};
+/* 6.3 Hardware profiles */
+const HW = {
+  ws:  { key:"ws",  name:"Workstation", note:"1× pro GPU",    capBoost:1.0, batch:32,  ram:32 },
+  dgx: { key:"dgx", name:"DGX Spark",   note:"Multi‑GPU",     capBoost:1.8, batch:64,  ram:64 }
+};
+
+/* 6.4 UI Builders */
+const appCards = document.getElementById('appCards');
+const hwCards  = document.getElementById('hwCards');
+function cardHtml(key, title, desc, color){
+  return `<button data-key="${key}" class="appCard group text-left p-4 rounded-xl border transition
+    hover:border-white/30 bg-white/5 border-white/10 w-full">
+    <div class="flex items-center gap-3">
+      <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${color}"></span>
+      <div class="font-semibold">${title}</div>
+    </div>
+    <div class="text-xs muted mt-1">${desc||""}</div>
+  </button>`;
 }
+appCards.innerHTML =
+  cardHtml('finex', APPS.finex.name, APPS.finex.desc, APPS.finex.color) +
+  cardHtml('echelon', APPS.echelon.name, APPS.echelon.desc, APPS.echelon.color) +
+  cardHtml('verdict', APPS.verdict.name, APPS.verdict.desc, APPS.verdict.color);
+hwCards.innerHTML = `
+  <button data-hw="ws"  class="hwCard cardBtn p-4 rounded-xl border bg-white/5 border-white/10 text-left">
+    <div class="font-semibold">Workstation</div><div class="text-xs muted">${HW.ws.note}</div>
+  </button>
+  <button data-hw="dgx" class="hwCard cardBtn p-4 rounded-xl border bg-white/5 border-white/10 text-left">
+    <div class="font-semibold">DGX Spark</div><div class="text-xs muted">${HW.dgx.note}</div>
+  </button>`;
 
-/* ===== 1) Definitions ===================================================== */
-const SOURCE_DEFS = [
-  { key:'coreBanking', label:'Core Banking (SQL/Oracle)', maxDay: 2_000_000, value: 400_000 },
-  { key:'pos',          label:'POS Terminals',            maxDay: 3_000_000, value: 600_000 },
-  { key:'web',          label:'Web & Mobile Apps',        maxDay: 5_000_000, value: 800_000 },
-  { key:'crm',          label:'CRM/Support',              maxDay: 1_500_000, value: 200_000 },
-  { key:'docs',         label:'Files & Docs (RAG)',       maxDay:   300_000, value:  50_000 },
-  { key:'edge',         label:'IoT / Edge Devices',       maxDay: 2_500_000, value: 300_000 },
-];
-const APP_DEFS = [
-  { key:'finex',   label:'Finex (Banking/Fraud)',  capacity: 900, color:'#7c3aed'},
-  { key:'verdict', label:'Verdict (Legal Ops)',    capacity: 400, color:'#06b6d4'},
-  { key:'echelon', label:'Échelon (Retail Intel)', capacity: 500, color:'#10b981'},
-];
-
-const BASE_COST_LOCAL   = 0.0006;
-const BASE_VALUE_EVENT  = 0.0014;
-const CLOUD_LAT_MS      = 120;         // round-trip
-const CLOUD_COST_FACTOR = 1.4;         // cloud overhead
-
-/* ===== 2) UI builders ===================================================== */
-const $sources = document.getElementById('sources');
-const $apps    = document.getElementById('apps');
-const $routing = document.getElementById('routing');
-
-function rowSlider(id, label, min, max, step, value, suffix=''){
-  return `
-    <div class="grid grid-cols-7 gap-3 items-center">
-      <label class="col-span-3 text-sm">${label}</label>
-      <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
-             class="col-span-3 w-full accent-purple-600" />
-      <div class="col-span-1 text-right text-sm"><span id="${id}-val">${Number(value).toLocaleString()}</span>${suffix}</div>
-    </div>`;
-}
-
-SOURCE_DEFS.forEach(s=>{
-  $sources.insertAdjacentHTML('beforeend',
-    rowSlider(`src-${s.key}`, s.label, 0, s.maxDay, Math.round(s.maxDay/100), s.value, '/d'));
+/* 6.5 Default selection */
+let appKey='finex', hwKey='ws';
+document.querySelectorAll('.appCard').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    appKey = btn.dataset.key;
+    highlightSelection();
+   	refreshRouting();
+  });
 });
-APP_DEFS.forEach(a=>{
-  $apps.insertAdjacentHTML('beforeend',
-    rowSlider(`cap-${a.key}`, a.label, 0, 2000, 10, a.capacity, ' ev/s'));
+document.querySelectorAll('.hwCard').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    hwKey = btn.dataset.hw;
+    highlightSelection();
+  });
 });
-APP_DEFS.forEach(a=>{
-  $routing.insertAdjacentHTML('beforeend',
-    rowSlider(`rt-${a.key}`, `${a.label} share`, 0, 100, 1, 33, ' %'));
-});
-function normalizeRouting(){
-  const vals = APP_DEFS.map(a => +document.getElementById(`rt-${a.key}`).value);
-  const sum = vals.reduce((a,b)=>a+b,0)||1;
-  APP_DEFS.forEach((a,i)=>{
-    const pct = Math.round(vals[i]*100/sum);
-    const el = document.getElementById(`rt-${a.key}`);
-    el.value = pct;
-    document.getElementById(`rt-${a.key}-val`).textContent = pct;
+function highlightSelection(){
+  document.querySelectorAll('.appCard').forEach(b=>{
+    b.classList.toggle('ring', b.dataset.key===appKey);
+  });
+  document.querySelectorAll('.hwCard').forEach(b=>{
+    b.classList.toggle('ring', b.dataset.hw===hwKey);
   });
 }
-normalizeRouting();
+highlightSelection();
 
+/* 6.6 Sources & Routing */
+const SOURCES = [
+  { key:'core',  label:'Core Banking (SQL/Oracle)', max:2_000_000, val:400_000 },
+  { key:'pos',   label:'POS Terminals',             max:3_000_000, val:600_000 },
+  { key:'web',   label:'Web & Mobile Apps',         max:5_000_000, val:800_000 },
+  { key:'crm',   label:'CRM/Support',               max:1_500_000, val:200_000 },
+  { key:'docs',  label:'Files & Docs (RAG)',        max:  300_000, val: 50_000 },
+  { key:'edge',  label:'IoT / Edge Devices',        max:2_500_000, val:300_000 },
+];
+const $sources = document.getElementById('sources');
+const $routing = document.getElementById('routing');
+function rowSlider(id,label,min,max,step,value,suffix=''){
+  return `<div class="grid grid-cols-7 gap-3 items-center">
+    <label class="col-span-3 text-sm">${label}</label>
+    <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"
+      class="col-span-3 w-full accent-purple-500" />
+    <div class="col-span-1 text-right text-sm"><span id="${id}-val">${Number(value).toLocaleString()}</span>${suffix}</div>
+  </div>`;
+}
+SOURCES.forEach(s=>{
+  $sources.insertAdjacentHTML('beforeend', rowSlider(`src-${s.key}`, s.label, 0, s.max, Math.round(s.max/100), s.val, '/d'));
+});
+function refreshRouting(){
+  $routing.innerHTML = rowSlider('rt-ingest', `${APPS[appKey].name} ingest share`, 0, 100, 1, 100, ' %');
+}
+refreshRouting();
 document.addEventListener('input', e=>{
   if(e.target.matches('input[type="range"]')){
-    const label = document.getElementById(e.target.id+'-val');
-    if(label) label.textContent = Number(e.target.value).toLocaleString();
-    if(e.target.id.startsWith('rt-')) normalizeRouting();
+    const l=document.getElementById(e.target.id+'-val'); if(l) l.textContent = Number(e.target.value).toLocaleString();
   }
 });
 
-/* ===== 3) State + charts ================================================== */
-let queue=0, playing=false;
-const tickMs=500, historyLen=60;
-
-const qctx = document.getElementById('chartQueue');
-const actx = document.getElementById('chartApps');
-
-const queueChart = new Chart(qctx, {
+/* 6.7 Charts */
+const queueChart = new Chart(document.getElementById('chartQueue'),{
   type:'line',
-  data:{
-    labels:Array(historyLen).fill(''),
+  data:{ labels:Array(60).fill(''),
     datasets:[
-      { label:'Queue (events)', data:Array(historyLen).fill(0), borderColor:'#7c3aed', backgroundColor:'rgba(124,58,237,.12)', tension:.3 },
-      { label:'Latency (s)',    data:Array(historyLen).fill(0), borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.12)', tension:.3, yAxisID:'y1' },
-    ]
-  },
-  options:{
-    responsive:true,
-    plugins:{ legend:{display:true} },
-    scales:{
-      y:{beginAtZero:true,title:{display:true,text:'events'}},
-      y1:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false},title:{display:true,text:'seconds'}}
-    }
-  }
+      {label:'Queue (events)', data:Array(60).fill(0), borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.15)', tension:.3},
+      {label:'Latency (s)', data:Array(60).fill(0), borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.12)', tension:.3, yAxisID:'y1'},
+    ]},
+  options:{ scales:{ y:{beginAtZero:true}, y1:{beginAtZero:true, position:'right', grid:{drawOnChartArea:false}}}, plugins:{legend:{labels:{color:'#d1d5db'}}}}
 });
-
-const appsChart = new Chart(actx, {
+const appsChart = new Chart(document.getElementById('chartApps'),{
   type:'bar',
-  data:{ labels:APP_DEFS.map(a=>a.label), datasets:[{ data:APP_DEFS.map(_=>0), backgroundColor:APP_DEFS.map(a=>a.color)}]},
-  options:{ responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,title:{display:true,text:'events/sec'}}}}
+  data:{ labels:['Ingest','Processed'], datasets:[{data:[0,0], backgroundColor:['#64748b','#8b5cf6']}]},
+  options:{ scales:{ y:{beginAtZero:true}}, plugins:{legend:{display:false}}}
 });
 
-/* ===== 4) KPI hooks ======================================================= */
-const $kpiIngest  = document.getElementById('kpiIngest');
-const $kpiProcess = document.getElementById('kpiProcess');
-const $kpiQueue   = document.getElementById('kpiQueue');
-const $kpiLatency = document.getElementById('kpiLatency');
-const $kpiROI     = document.getElementById('kpiROI');
+/* 6.8 Sankey */
+const sankeySvg = d3.select('#sankey');
+function renderSankey(flows,color){
+  const width = sankeySvg.node().clientWidth, height = +sankeySvg.attr('height');
+  sankeySvg.selectAll('*').remove();
+  const sankey = d3.sankey().nodeWidth(12).nodePadding(16).extent([[10,10],[width-10,height-10]]);
+  const nodes=[], idx=new Map(); const links = flows.map(f=>({source: i(f.source), target:i(f.target), value:Math.max(.01,f.value)}));
+  function i(n){ if(!idx.has(n)){ idx.set(n,nodes.length); nodes.push({name:n}); } return idx.get(n)}
+  const graph = sankey({nodes:nodes.map(d=>Object.assign({},d)), links});
+  sankeySvg.append('g').selectAll('path').data(graph.links).enter().append('path')
+    .attr('d', d3.sankeyLinkHorizontal()).attr('stroke', color).attr('stroke-width', d=>Math.max(1,d.width)).attr('fill','none').attr('opacity', .45);
+  sankeySvg.append('g').selectAll('rect').data(graph.nodes).enter().append('rect')
+    .attr('x', d=>d.x0).attr('y', d=>d.y0).attr('width', d=>d.x1-d.x0).attr('height', d=>Math.max(1,d.y1-d.y0))
+    .attr('fill', '#1f2937');
+  sankeySvg.append('g').selectAll('text').data(graph.nodes).enter().append('text')
+    .attr('x', d=>d.x0-6).attr('y', d=> (d.y0 + d.y1)/2 )
+    .attr('dy','0.35em').attr('text-anchor','end').style('font-size','12px').style('fill','#cbd5e1').text(d=>d.name);
+}
 
+/* 6.9 Simulation */
+let queue=0, playing=false, timer=null;
+const tickMs=400;  // smoother
 const $toggleRag   = document.getElementById('toggleRag');
 const $toggleCloud = document.getElementById('toggleCloud');
+const $kpiIngest=document.getElementById('kpiIngest'), $kpiProcess=document.getElementById('kpiProcess'),
+      $kpiQueue=document.getElementById('kpiQueue'), $kpiLatency=document.getElementById('kpiLatency'),
+      $kpiROI=document.getElementById('kpiROI');
+const $gpu=document.getElementById('gpuLoad'), $batch=document.getElementById('batchSize'),
+      $ram=document.getElementById('ramUse'), $cap=document.getElementById('pipeCap');
 
 function dayToSec(x){ return x/86400; }
 
-/* ===== 5) Sankey ========================================================== */
-const sankeySvg = d3.select('#sankey');
-function renderSankey(flows){
-  const width = sankeySvg.node().clientWidth, height = +sankeySvg.attr('height');
-  sankeySvg.selectAll('*').remove();
-
-  const sankey = d3.sankey()
-    .nodeWidth(12)
-    .nodePadding(16)
-    .extent([[10,10],[width-10,height-10]]);
-
-  const nodes = [], nodeIndex = new Map();
-  function idx(name){ if(!nodeIndex.has(name)){ nodeIndex.set(name, nodes.length); nodes.push({name}); } return nodeIndex.get(name); }
-
-  const links = flows.map(f=>({source: idx(f.source), target: idx(f.target), value: Math.max(0.01,f.value)}));
-  const graph = sankey({ nodes:nodes.map(d=>Object.assign({},d)), links:links });
-
-  // links
-  sankeySvg.append('g').selectAll('path')
-    .data(graph.links)
-    .enter().append('path')
-    .attr('d', d3.sankeyLinkHorizontal())
-    .attr('stroke', d=>d.target.color||'#94a3b8')
-    .attr('stroke-width', d=>Math.max(1, d.width))
-    .attr('fill','none')
-    .attr('opacity', .35);
-
-  // nodes
-  sankeySvg.append('g').selectAll('rect')
-    .data(graph.nodes)
-    .enter().append('rect')
-    .attr('x', d=>d.x0).attr('y', d=>d.y0)
-    .attr('width', d=>d.x1-d.x0).attr('height', d=>Math.max(1,d.y1-d.y0))
-    .attr('fill', d=>APP_DEFS.find(a=>a.label===d.name)?.color || '#334155');
-
-  sankeySvg.append('g').selectAll('text')
-    .data(graph.nodes).enter().append('text')
-    .attr('x', d=>d.x0-6).attr('y', d=> (d.y0 + d.y1)/2 )
-    .attr('dy','0.35em').attr('text-anchor','end')
-    .style('font-size','12px').text(d=>d.name);
-}
-
-/* ===== 6) Simulation ====================================================== */
 function step(){
   // ingest
-  const ingestPerDay = SOURCE_DEFS.map(s=>+document.getElementById(`src-${s.key}`).value).reduce((a,b)=>a+b,0);
-  const ingestSec = dayToSec(ingestPerDay);            // ev/s
+  const ingestPerDay = SOURCES.reduce((a,s)=> a + (+document.getElementById(`src-${s.key}`).value), 0);
+  const ingestSec = dayToSec(ingestPerDay);
   queue += ingestSec * (tickMs/1000);
 
-  // routing & capacity
-  const shares = APP_DEFS.map(a => (+document.getElementById(`rt-${a.key}`).value)/100);
-  let caps = APP_DEFS.map(a => +document.getElementById(`cap-${a.key}`).value);
+  // capacity based on app + hardware + RAG
+  const app = APPS[appKey], hw = HW[hwKey];
+  let cap = app.baseCap * hw.capBoost;
+  if($toggleRag.checked) cap *= app.ragPenalty;
+  const cloudLat = $toggleCloud.checked ? 0.12 : 0.0; // seconds
+  const batch = hw.batch * ($toggleRag.checked ? 0.9 : 1.0);
+  const ram = hw.ram * ($toggleRag.checked ? 1.2 : 1.0);
 
-  // RAG overhead: Verdict handles more retrieval
-  if($toggleRag.checked){
-    const idx = APP_DEFS.findIndex(a=>a.key==='verdict');
-    if(idx>=0) caps[idx] = Math.max(50, Math.round(caps[idx]*0.75)); // retrieval overhead reduces throughput
-  }
+  // process demand (all routed to selected app for clarity)
+  const routeShare = (+document.getElementById('rt-ingest').value)/100 || 1;
+  const demand = ingestSec * routeShare;
 
-  // how much each app processes this tick
-  let processedTotal = 0;
-  const processedPerApp = APP_DEFS.map((a,i)=>{
-    const demand = ingestSec * shares[i];
-    const available = Math.min(caps[i], queue * 2);
-    const proc = Math.min(demand + (queue * shares[i]), available) * (tickMs/1000);
-    processedTotal += proc;
-    return proc;
-  });
+  // available throughput limited by queue + cap
+  const procSec = Math.min(demand + queue, cap);
+  const processed = procSec * (tickMs/1000);
+  queue = Math.max(0, queue - processed);
 
-  // dequeue
-  queue = Math.max(0, queue - processedTotal);
+  // latency ~ queue/cap + cloud RTT
+  let latency = cap>0 ? queue/cap : 0;
+  latency += cloudLat;
 
-  // latency: base + queue/cap + optional cloud RTT
-  const totalCap = caps.reduce((a,b)=>a+b,0);
-  let latency = totalCap>0 ? queue/totalCap : 0;
-  if($toggleCloud.checked) latency += CLOUD_LAT_MS/1000;
-
-  // value & cost
-  const processedEvPerSec = processedPerApp.reduce((a,b)=>a+b,0)/(tickMs/1000);
-  const costPerEvent = $toggleCloud.checked ? BASE_COST_LOCAL*CLOUD_COST_FACTOR : BASE_COST_LOCAL;
-  const value = processedEvPerSec * BASE_VALUE_EVENT;
-  const cost  = processedEvPerSec * costPerEvent;
-  const margin = value - cost;
-  const roiPct = (margin / Math.max(cost,0.0001))*100;
+  // ROI
+  const cost = procSec * ($toggleCloud.checked ? app.costLocal*1.4 : app.costLocal);
+  const value = procSec * app.valuePerEvent;
+  const roiPct = ((value - cost)/Math.max(cost,0.0001))*100;
 
   // KPIs
-  document.getElementById('kpiIngest').textContent  = `${ingestSec.toFixed(1)} ev/s`;
-  document.getElementById('kpiProcess').textContent = `${processedEvPerSec.toFixed(1)} ev/s`;
-  document.getElementById('kpiQueue').textContent   = Math.round(queue).toLocaleString();
-  document.getElementById('kpiLatency').textContent = `${latency.toFixed(2)} s`;
-  document.getElementById('kpiROI').textContent     = `${roiPct>=0?'+':''}${roiPct.toFixed(1)}%`;
+  $kpiIngest.textContent  = `${ingestSec.toFixed(1)} ev/s`;
+  $kpiProcess.textContent = `${procSec.toFixed(1)} ev/s`;
+  $kpiQueue.textContent   = Math.round(queue).toLocaleString();
+  $kpiLatency.textContent = `${latency.toFixed(2)} s`;
+  $kpiROI.textContent     = `${roiPct>=0?'+':''}${roiPct.toFixed(1)}%`;
+
+  // Server panel
+  const gpuLoad = Math.min(100, Math.round((procSec/cap)*100));
+  $gpu.textContent = `${gpuLoad}%`;
+  $batch.textContent = `${Math.round(batch)}`;
+  $ram.textContent = `${ram.toFixed(1)} GB`;
+  $cap.textContent = `${Math.round(cap)} ev/s`;
+  document.getElementById('serverGlow').style.opacity = String(0.25 + 0.5*(gpuLoad/100));
 
   // Charts
-  queueChart.data.datasets[0].data.push(Math.round(queue));
-  queueChart.data.datasets[0].data.shift();
-  queueChart.data.datasets[1].data.push(+latency.toFixed(2));
-  queueChart.data.datasets[1].data.shift();
+  queueChart.data.datasets[0].data.push(Math.round(queue)); queueChart.data.datasets[0].data.shift();
+  queueChart.data.datasets[1].data.push(+latency.toFixed(2)); queueChart.data.datasets[1].data.shift();
   queueChart.update('none');
-
-  appsChart.data.datasets[0].data = processedPerApp.map(v=> +(v/(tickMs/1000)).toFixed(1));
+  appsChart.data.datasets[0].data = [ +(ingestSec.toFixed(1)), +(procSec.toFixed(1)) ];
   appsChart.update('none');
 
-  // Sankey flows: sources -> apps (ev/s)
-  const flows = [];
-  const labelsSources = {
-    coreBanking:'Core Banking',
-    pos:'POS',
-    web:'Web/Mobile',
-    crm:'CRM',
-    docs:'Docs (RAG)',
-    edge:'Edge/IoT'
-  };
-  const ingestSecPerSource = SOURCE_DEFS.map(s=>dayToSec(+document.getElementById(`src-${s.key}`).value));
-  APP_DEFS.forEach((a,i)=>a.color = APP_DEFS[i].color);
-  Object.entries(labelsSources).forEach(([k,label])=>{
-    const srcRate = ingestSecPerSource[SOURCE_DEFS.findIndex(s=>s.key===k)];
-    APP_DEFS.forEach((a,i)=>{
-      const share = (+document.getElementById(`rt-${a.key}`).value)/100;
-      flows.push({ source: label, target: a.label, value: srcRate*share });
-    });
-  });
-  renderSankey(flows);
+  // Sankey flows
+  const flows=[]; const color = APPS[appKey].color;
+  const perSource = SOURCES.map(s=> dayToSec(+document.getElementById(`src-${s.key}`).value));
+  const labels = ['Core Banking','POS','Web/Mobile','CRM','Docs (RAG)','Edge/IoT'];
+  perSource.forEach((rate,i)=> flows.push({source:labels[i], target:APPS[appKey].name, value: rate*routeShare }));
+  renderSankey(flows,color);
+
+  // SVG flow lines (animated)
+  drawServerFlows(perSource.reduce((a,b)=>a+b,0)/10, procSec/10);
 }
 
-let timer=null;
-document.getElementById('btnPlay').addEventListener('click',(e)=>{
+function drawServerFlows(inRate, outRate){
+  const svg = document.getElementById('flowSvg');
+  const w = svg.clientWidth, h = svg.clientHeight;
+  svg.innerHTML='';
+  const ns='http://www.w3.org/2000/svg';
+  function line(x1,y1,x2,y2,fast=false){
+    const p = document.createElementNS(ns,'path');
+    p.setAttribute('d',`M${x1},${y1} C ${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`);
+    p.setAttribute('class', fast?'flow-line fast':'flow-line');
+    svg.appendChild(p);
+  }
+  const inLines = Math.min(8, Math.max(2, Math.round(inRate)));
+  const outLines = Math.min(8, Math.max(2, Math.round(outRate)));
+  for(let i=0;i<inLines;i++)  line(10, 10 + i*(h-20)/Math.max(1,inLines-1),  w/2, 20 + i*(h-40)/Math.max(1,inLines-1), inRate>4);
+  for(let i=0;i<outLines;i++) line(w/2, 20 + i*(h-40)/Math.max(1,outLines-1),  w-10, 10 + i*(h-20)/Math.max(1,outLines-1), outRate>4);
+}
+
+/* 6.10 Controls */
+document.getElementById('btnPlay').addEventListener('click', (e)=>{
   playing = !playing; e.target.textContent = playing ? 'Pause' : 'Start';
   if(playing){ timer = setInterval(step, tickMs); } else { clearInterval(timer); }
 });
 document.getElementById('btnReset').addEventListener('click', ()=>{
-  queue=0;
-  queueChart.data.datasets.forEach(d=>d.data=Array(historyLen).fill(0));
-  queueChart.update();
-  appsChart.data.datasets[0].data = APP_DEFS.map(_=>0); appsChart.update();
+  queue=0; queueChart.data.datasets.forEach(d=>d.data=Array(60).fill(0)); queueChart.update();
+  appsChart.data.datasets[0].data=[0,0]; appsChart.update();
 });
 </script>
 </body>
